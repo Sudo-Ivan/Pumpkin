@@ -100,4 +100,4 @@ zizmor .github/workflows/
 
 ## Build status
 
-`cargo check` (stable 1.98.1 via `~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin`) succeeded on 2026-09-29 after these edits (`Finished dev profile in ~3m 50s`). Full `cargo build --release` not run here (same compile graph; expect longer). Note: system `/usr/bin/cargo` rustup proxy can mis-detect argv0 in some agent shells — use the toolchain `bin/cargo` path above if that happens.
+`cargo check` (stable 1.98.1 via `~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin`) succeeded on 2026-09-29 after these edits (`Finished dev profile in ~3m 50s`). Full `cargo build --release` not run here (same compile graph; expect longer). Note: system `/usr/bin/cargo` rustup proxy can wrongly detect argv0 in some agent shells — use the toolchain `bin/cargo` path above if that happens.
