@@ -48,10 +48,10 @@ jobs:
           TOOLCHAIN: ${{ matrix.toolchain }}
         run: rustup update "$TOOLCHAIN" && rustup default "$TOOLCHAIN"
 
-      # lookup-only: avoid cache poisoning when publishing release artifacts
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          lookup-only: true
+      # Cache writes retained for fork release builds: cold musl/ndk compile on ARM
+      # runners was hitting GitHub runner shutdown (exit 143) after ~45m. Tag pushes
+      # are maintainer-only; residual cache-poisoning risk documented in FORK.md.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2 # zizmor: ignore[cache-poisoning] maintainer-only tag publish; cold lookup-only caused ARM runner exit 143
 
       - name: Install musl-tools (Linux only)
         if: runner.os == 'Linux'
@@ -113,9 +113,7 @@ jobs:
           ndk-version: r27c
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          lookup-only: true
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2 # zizmor: ignore[cache-poisoning] maintainer-only tag publish; cold lookup-only caused ARM runner exit 143
       - name: Build Release with cargo ndk
         env:
           CARGO_NDK_PLATFORM: 24

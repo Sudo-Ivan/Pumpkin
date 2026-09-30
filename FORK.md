@@ -98,6 +98,21 @@ zizmor .github/workflows/
 
 `zizmor` is expected at `~/.local/bin/zizmor` on the maintainer machine (or install from https://docs.zizmor.sh/).
 
+
+### Release / nightly artifact jobs
+
+Master-push `rust.yml` no longer builds release binaries or drafts the `nightly`
+GitHub release (those jobs are `workflow_dispatch` only). Reason: SHA-pinned
+hardening plus `lookup-only` rust-cache forced cold `cargo build --release`
+(and musl + Android NDK) on every push; ARM runners were preempted mid-compile
+with exit 143 ("runner shutdown signal") after ~45 minutes — not a code defect
+(Android/Linux ARM64 **tests** already passed on the same commit).
+
+Tagged releases use `.github/workflows/release.yml` (preferred). That workflow
+keeps rust-cache **writes** so builds can finish; residual zizmor
+`cache-poisoning` risk is accepted here because tag/publish is maintainer-gated
+on this fork (no untrusted PR code in that path).
+
 ## Build status
 
 `cargo check` (stable 1.98.1 via `~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin`) succeeded on 2026-09-29 after these edits (`Finished dev profile in ~3m 50s`). Full `cargo build --release` not run here (same compile graph; expect longer). Note: system `/usr/bin/cargo` rustup proxy can wrongly detect argv0 in some agent shells — use the toolchain `bin/cargo` path above if that happens.

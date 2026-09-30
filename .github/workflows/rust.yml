@@ -317,7 +317,11 @@ jobs:
   build_release:
     name: Build project in release
     needs: [prepare, clippy_release, test, test_android]
-    if: needs.prepare.outputs.run_full == 'true' && github.event_name != 'pull_request'
+    # Fork: skip heavy release-artifact builds on every master push (cold musl/ndk builds
+    # were getting runner shutdown/exit 143). Use release.yml on tags, or dispatch this workflow.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      needs.prepare.outputs.run_full == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -342,8 +346,6 @@ jobs:
         shell: bash
         run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          lookup-only: true
       - name: Install musl-tools (Linux only)
         if: runner.os == 'Linux'
         run: |
@@ -387,7 +389,10 @@ jobs:
   build_android_release:
     name: Build project in release for Android AArch64
     needs: [prepare, clippy_release, test, test_android]
-    if: needs.prepare.outputs.run_full == 'true' && github.event_name != 'pull_request'
+    # Fork: same as build_release — tag via release.yml instead of every master push.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      needs.prepare.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -402,8 +407,6 @@ jobs:
         with:
           ndk-version: r27c
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          lookup-only: true
       - run: cargo install cargo-ndk
       - name: Build release with cargo ndk
         env:
@@ -427,7 +430,8 @@ jobs:
       contents: write
     needs: [build_release, build_android_release]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Fork: nightly drafting only when this workflow is manually dispatched.
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
