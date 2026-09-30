@@ -198,30 +198,7 @@ fn print_support_links_and_warning() {
             .color_named(NamedColor::DarkRed)
             .to_pretty_console(),
     );
-    info!(
-        "Report issues on {}",
-        TextComponent::text("https://github.com/Pumpkin-MC/Pumpkin/issues")
-            .color_named(NamedColor::DarkAqua)
-            .to_pretty_console()
-    );
-    info!(
-        "Join our {} for community support: {}",
-        TextComponent::text("Discord")
-            .color_named(NamedColor::DarkBlue)
-            .to_pretty_console(),
-        TextComponent::text("https://discord.gg/wT8XjrjKkf")
-            .color_named(NamedColor::Aqua)
-            .to_pretty_console()
-    );
-    info!(
-        "Consider {} to {}",
-        TextComponent::text("Donating")
-            .color_named(NamedColor::DarkPurple)
-            .to_pretty_console(),
-        TextComponent::text("https://pumpkinmc.org/donate/")
-            .color_named(NamedColor::Gold)
-            .to_pretty_console()
-    );
+    // Hard fork: upstream Discord/donate/issue links removed from startup banner.
 }
 
 fn handle_interrupt() {

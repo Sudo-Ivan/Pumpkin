@@ -2,8 +2,7 @@
 
 # Pumpkin
 
-![CI](https://github.com/Pumpkin-MC/Pumpkin/actions/workflows/rust.yml/badge.svg)
-[![Discord](https://img.shields.io/discord/1268592337445978193.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/wT8XjrjKkf)
+<!-- Badges for upstream CI/Discord removed in hard fork; see FORK.md -->
 [![License: GPL](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/gpl-3-0)
 
 </div>
@@ -99,21 +98,9 @@ and customizable experience. It prioritizes performance and player enjoyment whi
 
 See our [Quick Start](https://docs.pumpkinmc.org/#quick-start) guide to get Pumpkin running.
 
-## Contributions
-
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md)
-
 ## Docs
 
-Pumpkin's documentation can be found at <https://pumpkinmc.org/>
-
-## Communication
-
-Consider joining [our Discord server](https://discord.gg/wT8XjrjKkf) to stay up-to-date on events, updates, and connect with other members.
-
-## Funding
-
-If you want to fund me and help the project, check out the [Donation Page](https://pumpkinmc.org/donate/).
+Upstream docs (reference only): <https://pumpkinmc.org/>. This tree is a hard fork — see [FORK.md](FORK.md).
 
 ## License & Attribution
 

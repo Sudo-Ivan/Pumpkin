@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(default)]
 pub struct TelemetryConfig {
-    /// Whether anonymous telemetry is enabled. Default is true.
+    /// Whether anonymous telemetry is enabled. Default is false (hard-fork: disabled).
     pub enabled: bool,
     /// Custom telemetry backend ingestion endpoint.
     pub endpoint: String,
@@ -19,8 +19,9 @@ pub struct TelemetryConfig {
 impl Default for TelemetryConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
-            endpoint: "https://market.pumpkinmc.org/api/v1/rest/telemetry/heartbeat".to_string(),
+            // Hard fork: anonymous telemetry off by default; start path is also a no-op.
+            enabled: false,
+            endpoint: String::new(),
             interval_secs: 300,
             public: false,
             server_name: None,
@@ -40,11 +41,8 @@ mod tests {
     #[test]
     fn telemetry_default() {
         let default_config = TelemetryConfig::default();
-        assert!(default_config.enabled);
-        assert_eq!(
-            default_config.endpoint,
-            "https://market.pumpkinmc.org/api/v1/rest/telemetry/heartbeat"
-        );
+        assert!(!default_config.enabled);
+        assert_eq!(default_config.endpoint, "");
         assert_eq!(default_config.interval_secs, 300);
         assert!(!default_config.public);
         assert_eq!(default_config.server_name, None);

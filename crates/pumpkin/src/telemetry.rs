@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use pumpkin_config::TelemetryConfig;
@@ -449,77 +448,10 @@ pub fn start_telemetry(server: Arc<Server>) {
 /// Starts the background telemetry reporting task with a specific configuration.
 #[allow(clippy::needless_pass_by_value)]
 pub fn start_telemetry_with_config(server: Arc<Server>, config: &TelemetryConfig) {
-    if !config.enabled {
-        tracing::trace!("Telemetry is disabled in configuration.");
-        return;
-    }
-
-    tracing::info!(
-        "Anonymous server telemetry is enabled. Sending periodic heartbeats to {}",
-        config.endpoint
-    );
-
-    let user_agent = format!("Pumpkin-Server/{}", env!("CARGO_PKG_VERSION"));
-    let http_client = match pumpkin_auth::client_builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent(&user_agent)
-        .build()
-    {
-        Ok(c) => c,
-        Err(err) => {
-            tracing::debug!("Failed to create telemetry HTTP client: {err}");
-            return;
-        }
-    };
-
-    let signing_key = resolve_identity_key();
-    let telemetry_client = Arc::new(TelemetryClient::new(
-        signing_key,
-        http_client,
-        config.endpoint.clone(),
-    ));
-
-    let interval_secs = config.interval_secs.max(60);
-    let config = config.clone();
-    let server_task = server.clone();
-
-    server.spawn_task(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
-        while !crate::SHOULD_STOP.load(Ordering::Relaxed) {
-            tokio::select! {
-                _ = interval.tick() => {}
-                () = crate::STOP_INTERRUPT.cancelled() => {
-                    break;
-                }
-            }
-            if crate::SHOULD_STOP.load(Ordering::Relaxed) {
-                break;
-            }
-
-            let payload = build_heartbeat_payload(&server_task, &config);
-
-            match telemetry_client.send_heartbeat(&payload).await {
-                Ok(resp) => {
-                    tracing::trace!(
-                        "Telemetry heartbeat successfully transmitted (status: {}, public_key: {})",
-                        resp.status,
-                        resp.server_public_key
-                    );
-                }
-                Err(err) => {
-                    tracing::debug!("Telemetry heartbeat failed to send: {err}");
-                }
-            }
-        }
-
-        // Trigger shutdown telemetry on server termination / SIGTERM
-        if let Err(err) = telemetry_client
-            .send_shutdown(Some("server shutdown"))
-            .await
-        {
-            tracing::debug!("Telemetry shutdown message failed to send: {err}");
-        }
-    });
+    // Hard fork: anonymous marketplace heartbeats permanently disabled.
+    // Config is retained for TOML compatibility; network phone-home never starts.
+    let _ = (server, config);
+    tracing::trace!("Telemetry stripped in this hard fork; heartbeats will not be sent.");
 }
 
 #[cfg(test)]
