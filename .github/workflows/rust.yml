@@ -67,7 +67,9 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - run: rustup component add rustfmt
       - run: cargo fmt --check
 
@@ -81,7 +83,9 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - uses: bnjbvr/cargo-machete@ac30a525c0a8d163a92d727b3ff079ee3f6ecb08 # v0.9.2
 
   clippy:
@@ -99,7 +103,9 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.x"
-      - run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - run: rustup component add clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -119,7 +125,9 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - run: rustup component add clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo clippy --release --all-targets --all-features
@@ -162,7 +170,9 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.x"
-      - run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - uses: taiki-e/install-action@badb8c3638e0b773c6c17a6025c2306a8f1c4303 # nextest
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -192,7 +202,9 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - run: rustup target add aarch64-linux-android
       - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
         with:
@@ -252,7 +264,9 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.x"
-      - run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: debug-${{ runner.os }}-${{ runner.arch }}
@@ -282,7 +296,9 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.x"
-      - run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - run: rustup target add aarch64-linux-android
       - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
         with:
@@ -322,7 +338,9 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           lookup-only: true
@@ -376,7 +394,9 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - run: rustup target add aarch64-linux-android
       - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
         with:

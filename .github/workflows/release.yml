@@ -43,6 +43,7 @@ jobs:
           submodules: recursive
 
       - name: Setup Rust toolchain
+        shell: bash
         env:
           TOOLCHAIN: ${{ matrix.toolchain }}
         run: rustup update "$TOOLCHAIN" && rustup default "$TOOLCHAIN"
