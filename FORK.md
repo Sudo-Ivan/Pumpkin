@@ -10,7 +10,6 @@ This tree is a **hard fork**. There is no intent to sync PR-style with the origi
 | Ivan's GitHub fork (clone origin) | https://github.com/Sudo-Ivan/Pumpkin (`git@github.com:Sudo-Ivan/Pumpkin.git`) |
 | Fork date (local) | 2026-09-29 (America/Chicago) |
 | Cloned commit | `361c34c4d` (`feat(plugin): Branch a new v0.2 plugin API from the v0.1 API (#3766)`) |
-| Local path | `/run/media/user1/projects/ported-games/Pumpkin` |
 
 ## Remotes after hard-fork
 
@@ -65,7 +64,7 @@ Local crash reports (`crates/pumpkin/src/crash.rs`) write to disk only; no uploa
 From README / project layout (Rust Minecraft server):
 
 ```bash
-cd /run/media/user1/projects/ported-games/Pumpkin
+cd <repo-root>
 cargo build --release
 # or for a quick compile check:
 cargo check
@@ -73,6 +72,31 @@ cargo run --release
 ```
 
 Also see `Dockerfile`, `docker-compose.yml`, and Nix files (`flake.nix`, `default.nix`, `shell.nix`) if you prefer those entrypoints. Upstream quick-start docs: https://docs.pumpkinmc.org/#quick-start (reference only).
+
+
+
+## CI/CD hardening (this fork)
+
+Workflows retargeted for **Sudo-Ivan/Pumpkin** and hardened per
+[GitHub Actions secure-use](https://docs.github.com/en/actions/reference/security/secure-use):
+
+- Workflow-level `permissions: contents: read` (elevate per-job only when needed)
+- Third-party actions pinned to full commit SHAs (with version comments)
+- `persist-credentials: false` on `actions/checkout`
+- Untrusted `${{ github.event.* }}` / similar values passed into `run:` via `env:`, not string interpolation
+- Removed upstream-only `sync-wit.yml` (Pumpkin-MC WIT mirror + GitHub App bot secrets)
+- Removed SignPath Windows signing from `release.yml` (upstream secrets not available here)
+- Docker publish gated on `github.repository == 'Sudo-Ivan/Pumpkin'`
+- Dependabot covers `github-actions`, `cargo`, `docker`, and `devcontainers`
+- Added `.github/workflows/zizmor.yml` to audit workflows in CI
+
+Local audit (must stay clean before pushing workflow changes):
+
+```bash
+zizmor .github/workflows/
+```
+
+`zizmor` is expected at `~/.local/bin/zizmor` on the maintainer machine (or install from https://docs.zizmor.sh/).
 
 ## Build status
 
