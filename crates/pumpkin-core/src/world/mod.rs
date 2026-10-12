@@ -4702,10 +4702,15 @@ impl World {
 
     /// Sends the centre chunk ahead of the teleport and records it as held.
     pub async fn send_center_chunk(&self, player: &Player) {
+        let center_chunk = player.get_entity().chunk_pos.load();
+        self.send_center_chunk_at(player, center_chunk).await;
+    }
+
+    /// Sends a specific chunk ahead of the teleport and records it as held.
+    pub async fn send_center_chunk_at(&self, player: &Player, center_chunk: Vector2<i32>) {
         let ClientPlatform::Java(java_client) = player.client.as_ref() else {
             return;
         };
-        let center_chunk = player.get_entity().chunk_pos.load();
         let chunk = self
             .level
             .get_or_fetch_chunk(center_chunk, std::clone::Clone::clone)

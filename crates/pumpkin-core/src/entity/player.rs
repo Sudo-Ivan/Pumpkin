@@ -280,7 +280,8 @@ use pumpkin_protocol::java::server::play::{
     SClickSlot, SContainerButtonClick, SRenameItem, SlotActionType,
 };
 use pumpkin_util::math::{
-    boundingbox::BoundingBox, experience, position::BlockPos, vector2::Vector2, vector3::Vector3,
+    boundingbox::BoundingBox, experience, get_section_cord, position::BlockPos, vector2::Vector2,
+    vector3::Vector3,
 };
 use pumpkin_util::permission::PermissionLvl;
 use pumpkin_util::resource_location::ResourceLocation;
@@ -4181,6 +4182,8 @@ impl Player {
         let i = self.teleport_id_count.fetch_add(1, Ordering::Relaxed);
         self.chunk_send_epoch.fetch_add(1, Ordering::Relaxed);
         let teleport_id = i + 1;
+        // Vanilla Entity.teleportTo calls resetFallDistance.
+        self.living_entity.fall_distance.store(0.0);
         self.living_entity.entity.set_pos(position);
         let entity = &self.living_entity.entity;
         entity.set_rotation(yaw, pitch);
@@ -6867,21 +6870,36 @@ impl EntityBase for Player {
             // Same world
             let yaw = yaw.unwrap_or_else(|| self.living_entity.entity.yaw.load());
             let pitch = pitch.unwrap_or_else(|| self.living_entity.entity.pitch.load());
-            self.request_teleport(position, yaw, pitch);
-            let entity = self.get_entity();
-            let chunk_pos = entity.chunk_pos.load();
-            entity.world.load().broadcast_to_chunk_except(
-                chunk_pos,
-                &[self.living_entity.entity.entity_uuid],
-                &CEntityPositionSync::new(
-                    self.living_entity.entity.entity_id.into(),
-                    position,
-                    Vector3::new(0.0, 0.0, 0.0),
-                    yaw,
-                    pitch,
-                    entity.on_ground.load(Ordering::SeqCst),
-                ),
-            );
+            if let Some(player_arc) = self.world().get_player_by_uuid(self.gameprofile.id) {
+                self.spawn_task(async move {
+                    // Send the destination chunk ahead of the position packet so the client
+                    // doesn't fall through space that hasn't been generated or streamed yet.
+                    world
+                        .send_center_chunk_at(
+                            &player_arc,
+                            Vector2::new(
+                                get_section_cord(position.x.floor() as i32),
+                                get_section_cord(position.z.floor() as i32),
+                            ),
+                        )
+                        .await;
+                    player_arc.request_teleport(position, yaw, pitch);
+                    let entity = player_arc.get_entity();
+                    let chunk_pos = entity.chunk_pos.load();
+                    entity.world.load().broadcast_to_chunk_except(
+                        chunk_pos,
+                        &[entity.entity_uuid],
+                        &CEntityPositionSync::new(
+                            entity.entity_id.into(),
+                            position,
+                            Vector3::new(0.0, 0.0, 0.0),
+                            yaw,
+                            pitch,
+                            entity.on_ground.load(Ordering::SeqCst),
+                        ),
+                    );
+                });
+            }
         } else if let Some(player_arc) = self.world().get_player_by_uuid(self.gameprofile.id) {
             self.spawn_task(async move {
                 player_arc.teleport_world(world, position, yaw, pitch).await;
