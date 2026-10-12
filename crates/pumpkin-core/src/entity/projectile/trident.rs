@@ -27,7 +27,8 @@ pub struct TridentEntity {
     pub in_ground_time: AtomicU32,
     pub life: AtomicU32,
     pub shake_time: AtomicU8,
-    pub has_hit: AtomicBool,
+    /// Vanilla `dealtDamage`: true once the trident has damaged an entity.
+    pub dealt_damage: AtomicBool,
     pub last_block_pos: Arc<std::sync::RwLock<Option<BlockPos>>>,
 }
 
@@ -48,7 +49,7 @@ impl TridentEntity {
             in_ground_time: AtomicU32::new(0),
             life: AtomicU32::new(0),
             shake_time: AtomicU8::new(0),
-            has_hit: AtomicBool::new(false),
+            dealt_damage: AtomicBool::new(false),
             last_block_pos: Arc::new(std::sync::RwLock::new(None)),
         }
     }
@@ -73,7 +74,7 @@ impl TridentEntity {
             in_ground_time: AtomicU32::new(0),
             life: AtomicU32::new(0),
             shake_time: AtomicU8::new(0),
-            has_hit: AtomicBool::new(false),
+            dealt_damage: AtomicBool::new(false),
             last_block_pos: Arc::new(std::sync::RwLock::new(None)),
         }
     }
@@ -260,8 +261,12 @@ impl EntityBase for TridentEntity {
             }
         }
 
-        // Entity collisions
-        let candidates = world.get_entities_at_box(&search_box);
+        // Entity collisions; vanilla `canHitEntity` is false once dealtDamage is set
+        let candidates = if self.dealt_damage.load(Ordering::Relaxed) {
+            Vec::new()
+        } else {
+            world.get_entities_at_box(&search_box)
+        };
         for cand in candidates {
             if self.should_skip_collision(entity, &cand) {
                 continue;
@@ -282,9 +287,7 @@ impl EntityBase for TridentEntity {
         }
 
         // Handle hit
-        if let Some(h) = hit
-            && !self.has_hit.swap(true, Ordering::SeqCst)
-        {
+        if let Some(h) = hit {
             caller.on_hit(h);
         }
     }
@@ -377,9 +380,10 @@ impl EntityBase for TridentEntity {
                 let chunk_pos = entity.chunk_pos.load();
                 world.broadcast_to_chunk(chunk_pos, &sound_packet);
 
-                // Standard bounce/fall-back behavior
+                // Standard bounce/fall-back behavior; vanilla sets dealtDamage so the
+                // falling trident can no longer hit entities, only the ground
                 entity.velocity.store(Vector3::new(0.0, -0.1, 0.0));
-                self.has_hit.store(false, Ordering::Relaxed); // Let it hit the ground
+                self.dealt_damage.store(true, Ordering::Relaxed);
             }
         }
     }
