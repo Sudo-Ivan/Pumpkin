@@ -33,19 +33,28 @@ pub fn take_n_ingredient(
         .write()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     for stack in main_inventory.iter_mut() {
-        if !stack.is_empty() && ingredient.match_item(stack.item) {
-            let to_take = (count - taken).min(stack.item_count);
-            let sub_stack = stack.split(to_take);
-            taken += sub_stack.item_count;
+        if stack.is_empty() || !ingredient.match_item(stack.item) {
+            continue;
+        }
+        // All taken items merge into one stack, so only take stacks of the first
+        // matched item. Vanilla caps recipe-book placement at the item's max stack size.
+        if let Some(result) = &result
+            && result.item.id != stack.item.id
+        {
+            continue;
+        }
+        let cap = count.min(stack.get_max_stack_size());
+        let to_take = (cap - taken).min(stack.item_count);
+        let sub_stack = stack.split(to_take);
+        taken += sub_stack.item_count;
 
-            match &mut result {
-                None => result = Some(sub_stack),
-                Some(r) => r.item_count += sub_stack.item_count,
-            }
+        match &mut result {
+            None => result = Some(sub_stack),
+            Some(r) => r.item_count += sub_stack.item_count,
+        }
 
-            if taken >= count {
-                break;
-            }
+        if taken >= cap {
+            break;
         }
     }
     result.unwrap_or_else(|| ItemStack::EMPTY.clone())
