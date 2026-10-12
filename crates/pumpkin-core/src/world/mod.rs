@@ -591,7 +591,7 @@ impl World {
             .map(|chunk_block_entities| *chunk_block_entities.key())
             .collect();
         for chunk_pos in chunks {
-            self.save_block_entities(chunk_pos);
+            self.save_block_entities(chunk_pos).await;
         }
 
         // Save portal POI to disk
@@ -660,7 +660,7 @@ impl World {
     /// `get_block_entity` takes the saved NBT out of the chunk when it wakes an
     /// entity up - so this has to run before the chunk is dropped, or everything
     /// the entity did since it was loaded is lost.
-    fn save_block_entities(&self, chunk_pos: Vector2<i32>) {
+    async fn save_block_entities(&self, chunk_pos: Vector2<i32>) {
         let Some(block_entities) = self
             .block_entities
             .get(&chunk_pos)
@@ -679,7 +679,23 @@ impl World {
             {
                 nbt.put_compound("PumpkinCustomData", custom_data.clone());
             }
-            self.add_block_entity_nbt(block_entity.get_position(), &nbt);
+            // The chunk can already be gone from `loaded_chunks` when its tickets were
+            // released first, so fetch it back instead of dropping the live data like
+            // `add_block_entity_nbt` does on a miss. A failed fetch returns an empty
+            // chunk; skip it so its stub data can never overwrite the real one.
+            let position = block_entity.get_position();
+            self.level
+                .get_or_fetch_chunk(position.chunk_position(), |chunk| {
+                    if chunk.light_populated.load(Relaxed) {
+                        chunk
+                            .pending_block_entities
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .insert(position, nbt.clone());
+                        chunk.mark_dirty(true);
+                    }
+                })
+                .await;
         }
     }
 
@@ -4980,7 +4996,7 @@ impl World {
         }
 
         for chunk_pos in &chunks_set {
-            self.save_block_entities(*chunk_pos);
+            self.save_block_entities(*chunk_pos).await;
             self.block_entities.remove(chunk_pos);
         }
     }
@@ -6855,7 +6871,7 @@ impl World {
             .map(|chunk_block_entities| *chunk_block_entities.key())
             .collect();
         for chunk_pos in chunks {
-            self.save_block_entities(chunk_pos);
+            self.save_block_entities(chunk_pos).await;
         }
 
         if let Ok(mut portal_poi) = self.portal_poi.try_lock() {
