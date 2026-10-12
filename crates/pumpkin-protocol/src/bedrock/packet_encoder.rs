@@ -36,6 +36,12 @@ impl BedrockBatchEncoder {
         self.compression = Some(compression_info);
     }
 
+    /// Returns the negotiated compression threshold and level, if compression is active.
+    #[must_use]
+    pub const fn compression(&self) -> Option<(CompressionThreshold, CompressionLevel)> {
+        self.compression
+    }
+
     /// Encodes a raw packet payload with the 14-bit Bedrock game packet header into a batch frame.
     pub fn write_game_packet(
         &self,

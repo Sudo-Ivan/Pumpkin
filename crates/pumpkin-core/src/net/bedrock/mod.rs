@@ -44,6 +44,7 @@ use pumpkin_protocol::{
             set_player_inventory_options::SSetPlayerInventoryOptions, text::SText,
         },
     },
+    codec::var_uint::VarUInt,
     packet::Packet,
     serial::{PacketRead, PacketReadSlice},
 };
@@ -65,7 +66,7 @@ use crate::{
         DisconnectReason, MAX_PENDING_BYTES, PacketHandlerResult, PacketRateLimiter,
         decrement_pending_bytes,
     },
-    plugin::api::events::world::chunk_send::ChunkSend,
+    plugin::{api::events::world::chunk_send::ChunkSend, server::packet::PacketSentEvent},
     server::Server,
 };
 use arc_swap::ArcSwap;
@@ -454,10 +455,79 @@ impl BedrockClient {
         self.try_enqueue_packet_data(packet_data);
     }
 
+    /// Gates `PacketSentEvent` firing on the send paths: `None` when there is no
+    /// bound player or no registered handler, so packets pass through untouched.
+    fn packet_sent_context(&self) -> Option<PacketSentContext> {
+        let player = self.player.load_full().as_ref().clone()?;
+        let server = player.world().server.upgrade()?;
+        if !server.plugin_manager.has_handlers::<PacketSentEvent>() {
+            return None;
+        }
+        let compression = self
+            .network_writer
+            .try_read()
+            .ok()
+            .and_then(|writer| writer.compression());
+        Some((player, server, compression))
+    }
+
+    /// `PacketSentEvent` choke point of the Bedrock enqueue path: the batch frame
+    /// is decoded and the event fires for every contained game packet, so plugins
+    /// can observe, rewrite or drop it. `None` when every contained packet was
+    /// cancelled.
+    fn translate_outgoing(&self, packet_data: Bytes) -> Option<Bytes> {
+        let (player, server, compression) = self.packet_sent_context()?;
+        let records = decode_bedrock_batch(&packet_data, compression)?;
+        let mut kept = Vec::with_capacity(records.len());
+        let mut changed = false;
+        for (header, payload) in records {
+            let packet_id = (header & 0x3FF) as i32;
+            let mut event = PacketSentEvent::new_raw(player.clone(), packet_id, payload.clone());
+            server.plugin_manager.fire_blocking(&server, &mut event);
+            if event.cancelled {
+                changed = true;
+                continue;
+            }
+            changed = changed || event.packet_id != packet_id || event.payload != payload;
+            kept.push((
+                (header & !0x3FF) | (event.packet_id as u32 & 0x3FF),
+                event.payload,
+            ));
+        }
+        finish_bedrock_batch(packet_data, &kept, compression, changed)
+    }
+
+    /// Async variant of [`Self::translate_outgoing`] for the priority send path.
+    async fn translate_outgoing_async(&self, packet_data: Bytes) -> Option<Bytes> {
+        let (player, server, compression) = self.packet_sent_context()?;
+        let records = decode_bedrock_batch(&packet_data, compression)?;
+        let mut kept = Vec::with_capacity(records.len());
+        let mut changed = false;
+        for (header, payload) in records {
+            let packet_id = (header & 0x3FF) as i32;
+            let mut event = PacketSentEvent::new_raw(player.clone(), packet_id, payload.clone());
+            server.plugin_manager.fire(&server, &mut event).await;
+            if event.cancelled {
+                changed = true;
+                continue;
+            }
+            changed = changed || event.packet_id != packet_id || event.payload != payload;
+            kept.push((
+                (header & !0x3FF) | (event.packet_id as u32 & 0x3FF),
+                event.payload,
+            ));
+        }
+        finish_bedrock_batch(packet_data, &kept, compression, changed)
+    }
+
     pub fn try_enqueue_packet_data(&self, packet_data: Bytes) {
         if self.is_closed() {
             return;
         }
+
+        let Some(packet_data) = self.translate_outgoing(packet_data) else {
+            return;
+        };
 
         let packet_len = packet_data.len();
         let prev_bytes = self.pending_bytes.fetch_add(packet_len, Ordering::AcqRel);
@@ -547,6 +617,10 @@ impl BedrockClient {
         if self.is_closed() {
             return;
         }
+
+        let Some(packet_data) = self.translate_outgoing_async(packet_data).await else {
+            return;
+        };
 
         let packet_len = packet_data.len();
         let prev_bytes = self.pending_bytes.fetch_add(packet_len, Ordering::AcqRel);
@@ -908,4 +982,104 @@ impl BedrockClient {
             Some(self.tasks.spawn(task))
         }
     }
+}
+
+/// Everything `PacketSentEvent` firing needs on the send path: the bound
+/// player, the server handle and the negotiated `(threshold, level)` pair.
+type PacketSentContext = (Arc<Player>, Arc<Server>, Option<(usize, u32)>);
+
+/// Splits a serialized Bedrock batch frame into its game packet records:
+/// the 14-bit header (packet id plus sub-client bits) and the payload.
+/// `compression` is the negotiated `(threshold, level)` pair or `None`.
+/// `None` when the frame can't be parsed - callers pass it through untouched.
+fn decode_bedrock_batch(
+    packet_data: &[u8],
+    compression: Option<(usize, u32)>,
+) -> Option<Vec<(u32, Bytes)>> {
+    let (first, rest) = packet_data.split_first()?;
+    if *first != BEDROCK_GAME_PACKET {
+        return None;
+    }
+    let decompressed;
+    let batch: &[u8] = if compression.is_some() {
+        match rest.split_first() {
+            Some((0x00, compressed)) => {
+                use flate2::read::DeflateDecoder;
+                let mut out = Vec::new();
+                std::io::Read::read_to_end(&mut DeflateDecoder::new(compressed), &mut out).ok()?;
+                decompressed = out;
+                &decompressed
+            }
+            Some((0xFF, raw)) => raw,
+            _ => return None,
+        }
+    } else {
+        rest
+    };
+    let mut records = Vec::new();
+    let mut cursor = Cursor::new(batch);
+    while (cursor.position() as usize) < batch.len() {
+        let len = VarUInt::decode(&mut cursor).ok()?;
+        let header = VarUInt::decode(&mut cursor).ok()?;
+        let payload_len = (len.0 as usize).checked_sub(header.written_size())?;
+        let start = cursor.position() as usize;
+        let end = start.checked_add(payload_len)?;
+        if end > batch.len() {
+            return None;
+        }
+        records.push((header.0, Bytes::copy_from_slice(&batch[start..end])));
+        cursor.set_position(end as u64);
+    }
+    if records.is_empty() {
+        return None;
+    }
+    Some(records)
+}
+
+/// Re-encodes game packet records into a batch frame in the format
+/// `decode_bedrock_batch` reads back. `compression` is `(threshold, level)`.
+fn encode_bedrock_batch(
+    records: &[(u32, Bytes)],
+    compression: Option<(usize, u32)>,
+) -> Option<Vec<u8>> {
+    let mut batch = Vec::new();
+    for (header, payload) in records {
+        let header_varint = VarUInt(*header);
+        let content_len = u32::try_from(header_varint.written_size() + payload.len()).ok()?;
+        VarUInt(content_len).encode(&mut batch).ok()?;
+        header_varint.encode(&mut batch).ok()?;
+        batch.extend_from_slice(payload);
+    }
+    let mut out = Vec::with_capacity(batch.len() + 8);
+    out.push(BEDROCK_GAME_PACKET);
+    if let Some((_, level)) = compression {
+        out.push(0x00);
+        let mut encoder =
+            flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::new(level));
+        encoder.write_all(&batch).ok()?;
+        let compressed = encoder.finish().ok()?;
+        out.extend_from_slice(&compressed);
+    } else {
+        out.extend_from_slice(&batch);
+    }
+    Some(out)
+}
+
+/// Re-encodes the records that survived `PacketSentEvent` back into a batch
+/// frame. `None` drops the whole frame (every packet was cancelled). Returns
+/// the original bytes untouched when nothing was cancelled or rewritten, which
+/// keeps the no-handler fast path free of encode work.
+fn finish_bedrock_batch(
+    packet_data: Bytes,
+    kept: &[(u32, Bytes)],
+    compression: Option<(usize, u32)>,
+    changed: bool,
+) -> Option<Bytes> {
+    if kept.is_empty() {
+        return None;
+    }
+    if !changed {
+        return Some(packet_data);
+    }
+    encode_bedrock_batch(kept, compression).map(Bytes::from)
 }

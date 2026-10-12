@@ -425,13 +425,12 @@ impl JavaClient {
         Some((packet_data, packet_len))
     }
 
-    /// `PacketSentEvent` for clients the multiversion plugin admitted below
-    /// `CURRENT_MC_VERSION`: it gets the 26.3 id + payload and rewrites both.
+    /// `PacketSentEvent` choke point of all enqueue/send paths: every clientbound
+    /// packet fires the event when a handler is registered, so plugins can observe,
+    /// rewrite or drop it. Clients the multiversion plugin admitted below
+    /// `CURRENT_MC_VERSION` get the 26.3 id + payload and rewrite both.
     /// `None` when cancelled.
     fn translate_outgoing(&self, packet_data: Bytes) -> Option<Bytes> {
-        if self.version.load() == CURRENT_MC_VERSION {
-            return Some(packet_data);
-        }
         // TODO: packets sent before `set_player` (e.g. an `add_player` kick) go out untranslated.
         let player = self.player.load_full();
         let Some(player) = player.as_ref() else {
