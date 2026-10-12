@@ -15,6 +15,20 @@ on:
         required: false
         default: stable
         type: string
+      release_lto:
+        description: LTO mode for the release builds (off, thin or fat)
+        required: false
+        default: "off"
+        type: choice
+        options:
+          - "off"
+          - thin
+          - fat
+      release_codegen_units:
+        description: Codegen units for the release builds
+        required: false
+        default: "16"
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -329,14 +343,25 @@ jobs:
         include:
           - name: Linux x64
             os: ubuntu-latest
+            asset: pumpkin-X64-Linux
           - name: Linux ARM64
             os: ubuntu-26.04-arm
+            asset: pumpkin-ARM64-Linux
           - name: Windows x64
             os: windows-latest
+            asset: pumpkin-X64-Windows.exe
           - name: Windows ARM64
             os: windows-11-arm
+            asset: pumpkin-ARM64-Windows.exe
           - name: macOS
             os: macos-latest
+            asset: pumpkin-ARM64-macOS
+    env:
+      # Full LTO with one codegen unit is too slow and memory hungry to run on every push, so these
+      # default to no LTO and 16 codegen units. Manual runs can change them through the inputs.
+      # The nightly workflow builds the shipped binaries with the release profile as is.
+      CARGO_PROFILE_RELEASE_LTO: ${{ inputs.release_lto || 'off' }}
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.release_codegen_units || '16' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -346,45 +371,69 @@ jobs:
         shell: bash
         run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - name: Install musl-tools (Linux only)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
       - name: Build release
-        shell: bash
-        run: |
-          cargo build --verbose --release
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            if [ "$RUNNER_ARCH" == "X64" ]; then
-              TARGET="x86_64-unknown-linux-musl"
-            elif [ "$RUNNER_ARCH" == "ARM64" ]; then
-              TARGET="aarch64-unknown-linux-musl"
-            fi
-            rustup target add "$TARGET"
-            cargo build --verbose --release --target "$TARGET"
-          fi
-      - name: Prepare artifacts
+        run: cargo build --verbose --release
+      - name: Prepare artifact
         shell: bash
         run: |
           mkdir -p dist
           EXT=""
-          if [ "$RUNNER_OS" == "Windows" ]; then EXT=".exe"; fi
-          cp "target/release/pumpkin${EXT}" "dist/pumpkin-${RUNNER_ARCH}-${RUNNER_OS}${EXT}"
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            if [ "$RUNNER_ARCH" == "X64" ]; then
-              TARGET="x86_64-unknown-linux-musl"
-            elif [ "$RUNNER_ARCH" == "ARM64" ]; then
-              TARGET="aarch64-unknown-linux-musl"
-            fi
-            cp "target/${TARGET}/release/pumpkin" "dist/pumpkin-${RUNNER_ARCH}-${RUNNER_OS}-musl"
-          fi
-      - name: Export executable
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+          if [ "${{ runner.os }}" == "Windows" ]; then EXT=".exe"; fi
+          cp "target/release/pumpkin$EXT" "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pumpkin-${{ runner.arch }}-${{ runner.os }}
+          name: ${{ matrix.asset }}
           compression-level: 9
-          path: dist/pumpkin-*
+          path: dist/${{ matrix.asset }}
+
+  build_release_musl:
+    name: Build project in release with musl
+    needs: [prepare, clippy_release, test, test_android]
+    # Fork: same as build_release — tag via release.yml instead of every master push.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      needs.prepare.outputs.run_full == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            asset: pumpkin-X64-Linux-musl
+          - name: Linux ARM64
+            os: ubuntu-26.04-arm
+            target: aarch64-unknown-linux-musl
+            asset: pumpkin-ARM64-Linux-musl
+    env:
+      CARGO_PROFILE_RELEASE_LTO: ${{ inputs.release_lto || 'off' }}
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.release_codegen_units || '16' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - name: Setup Rust toolchain
+        shell: bash
+        run: rustup update "$CI_RUST_TOOLCHAIN_VER" && rustup default "$CI_RUST_TOOLCHAIN_VER"
+      - run: rustup target add ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Install musl-tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+      - name: Build release
+        run: cargo build --verbose --release --target ${{ matrix.target }}
+      - name: Prepare artifact
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/pumpkin" "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.asset }}
+          compression-level: 9
+          path: dist/${{ matrix.asset }}
 
   build_android_release:
     name: Build project in release for Android AArch64
@@ -394,6 +443,9 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       needs.prepare.outputs.run_full == 'true'
     runs-on: ubuntu-latest
+    env:
+      CARGO_PROFILE_RELEASE_LTO: ${{ inputs.release_lto || 'off' }}
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.release_codegen_units || '16' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -412,8 +464,7 @@ jobs:
         env:
           CARGO_NDK_PLATFORM: 24
         run: cargo ndk -t arm64-v8a build --release --locked
-      - name: Prepare artifacts
-        shell: bash
+      - name: Prepare artifact
         run: |
           mkdir -p dist
           cp "target/aarch64-linux-android/release/pumpkin" "dist/pumpkin-aarch64-android"
@@ -424,13 +475,13 @@ jobs:
           compression-level: 9
           path: dist/pumpkin-aarch64-android
 
-  draft_release:
-    name: Draft nightly release
+  draft_canary_release:
+    name: Update canary release
     permissions:
       contents: write
-    needs: [build_release, build_android_release]
+    needs: [build_release, build_release_musl, build_android_release]
     runs-on: ubuntu-latest
-    # Fork: nightly drafting only when this workflow is manually dispatched.
+    # Fork: canary drafting only when this workflow is manually dispatched.
     if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -440,7 +491,7 @@ jobs:
       - name: Download prebuilt binary artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: "**/pumpkin-*"
+          pattern: "pumpkin-*"
           path: dist/
           merge-multiple: true
       - name: Generate release notes
@@ -448,25 +499,27 @@ jobs:
           tree dist/
           echo "From commit: $(git rev-parse --short HEAD)" > dist/RELEASE.md
           echo "Generated on: $(date -u +"%Y-%m-%d %H:%M") UTC" >> dist/RELEASE.md
+          echo "" >> dist/RELEASE.md
+          echo "Canary build of master for testing, built without LTO. The fully optimized daily build is the Nightly Build release." >> dist/RELEASE.md
           cat dist/RELEASE.md
-      - name: Update the nightly tag
+      - name: Update the canary tag
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git tag --force nightly
-          git push --force origin tag nightly
-      - name: Draft a nightly GitHub release
+          git tag --force canary
+          git push --force origin tag canary
+      - name: Draft a canary GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view nightly >/dev/null 2>&1; then
-            gh release delete nightly --yes || true
+          if gh release view canary >/dev/null 2>&1; then
+            gh release delete canary --yes || true
           fi
-          gh release create nightly \
+          gh release create canary \
             --prerelease \
-            --title "Nightly Build" \
+            --title "Canary Build" \
             --notes-file dist/RELEASE.md \
             dist/pumpkin*

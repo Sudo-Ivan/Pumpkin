@@ -14,13 +14,21 @@ This tree is a **hard fork**. There is no intent to sync PR-style with the origi
 ## Remotes after hard-fork
 
 ```
-origin  git@github.com:Sudo-Ivan/Pumpkin.git (fetch)
-origin  git@github.com:Sudo-Ivan/Pumpkin.git (push)
+origin    git@github.com:Sudo-Ivan/Pumpkin.git (fetch)
+origin    git@github.com:Sudo-Ivan/Pumpkin.git (push)
+upstream  https://github.com/Pumpkin-MC/Pumpkin.git (fetch)
+upstream  https://github.com/Pumpkin-MC/Pumpkin.git (push)
 ```
 
-- No `upstream` remote was present after clone; none was added.
+- No `upstream` remote was present after clone; added on 2026-10-12 for upstream sync merges.
 - `origin` left pointing at `Sudo-Ivan/Pumpkin`.
-- Git history left intact (file edits only; no force-push).
+- Git history left intact (file edits only; no force-push). Upstream is merged in, not rebased.
+
+## Upstream syncs
+
+| Date | Upstream head merged | Notes |
+| --- | --- | --- |
+| 2026-10-12 | `b0c48b2d7` | First sync. Server crate split into `pumpkin-core` plus `pumpkin-wasm-host*`; `crates/pumpkin` is now the binary. Telemetry no-op followed the file move. Kept deleted community files deleted; `rust.yml` kept SHA pins, `persist-credentials: false`, dispatch-only release builds, and gh CLI release drafting (now `canary`). |
 
 ## Removed / changed
 
